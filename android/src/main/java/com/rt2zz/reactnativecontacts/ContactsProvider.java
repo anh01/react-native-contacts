@@ -5,6 +5,7 @@ import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
 import android.provider.ContactsContract;
+import android.provider.Settings;
 import android.support.annotation.NonNull;
 import android.text.TextUtils;
 import android.util.Log;
@@ -12,6 +13,8 @@ import android.util.Log;
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
+//import com.facebook.react.bridge.ReadableMap;
+import com.facebook.react.bridge.WritableNativeMap;
 
 import java.io.BufferedInputStream;
 import java.io.File;
@@ -32,29 +35,25 @@ import static android.provider.ContactsContract.CommonDataKinds.Organization;
 public class ContactsProvider {
     public static final int ID_FOR_PROFILE_CONTACT = -1;
 
-    private static final List<String> JUST_ME_PROJECTION = new ArrayList<String>() {{
+    private static final List<String> PROJECTION_ID_NAME_IMG = new ArrayList<String>() {{
         add(ContactsContract.Contacts.Data.MIMETYPE);
         add(ContactsContract.Profile.DISPLAY_NAME);
         add(Contactables.PHOTO_URI);
         add(StructuredName.DISPLAY_NAME);
-        add(StructuredName.GIVEN_NAME);
-        add(StructuredName.MIDDLE_NAME);
-        add(StructuredName.FAMILY_NAME);
-        add(Phone.NUMBER);
-        add(Phone.TYPE);
-        add(Phone.LABEL);
-        add(Email.DATA);
-        add(Email.ADDRESS);
-        add(Email.TYPE);
-        add(Email.LABEL);
-        add(Organization.COMPANY);
-        add(Organization.TITLE);
+        add(ContactsContract.Data.CONTACT_ID);
     }};
 
-    private static final List<String> FULL_PROJECTION = new ArrayList<String>() {{
+    private static final List<String> PROJECTION_ID_NAME_IMG_PHONENUMBERS_EMAILS = new ArrayList<String>() {{
+        add(ContactsContract.Contacts.Data.MIMETYPE);
+        add(ContactsContract.Profile.DISPLAY_NAME);
+        add(Contactables.PHOTO_URI);
+        add(StructuredName.DISPLAY_NAME);
         add(ContactsContract.Data.CONTACT_ID);
-        add(ContactsContract.RawContacts.SOURCE_ID);
-        addAll(JUST_ME_PROJECTION);
+        add(ContactsContract.CommonDataKinds.Phone.NUMBER);
+        add(Phone.NUMBER);
+        add(Phone.TYPE);
+        add(Email.ADDRESS);
+        //add(ContactsContract.RawContacts.SOURCE_ID);
     }};
 
     private final ContentResolver contentResolver;
@@ -66,37 +65,18 @@ public class ContactsProvider {
     }
 
     public WritableArray getContacts() {
-        Map<String, Contact> justMe;
-        {
-            Cursor cursor = contentResolver.query(
-                    Uri.withAppendedPath(ContactsContract.Profile.CONTENT_URI, ContactsContract.Contacts.Data.CONTENT_DIRECTORY),
-                    JUST_ME_PROJECTION.toArray(new String[JUST_ME_PROJECTION.size()]),
-                    null,
-                    null,
-                    null
-            );
-
-            try {
-                justMe = loadContactsFrom(cursor);
-            } finally {
-                if (cursor != null) {
-                    cursor.close();
-                }
-            }
-        }
-
-        Map<String, Contact> everyoneElse;
+        Map<String, Contact_Id_Name_Img> phonebookContacts;
         {
             Cursor cursor = contentResolver.query(
                     ContactsContract.Data.CONTENT_URI,
-                    FULL_PROJECTION.toArray(new String[FULL_PROJECTION.size()]),
-                    ContactsContract.Data.MIMETYPE + "=? OR " + ContactsContract.Data.MIMETYPE + "=? OR " + ContactsContract.Data.MIMETYPE + "=? OR " + ContactsContract.Data.MIMETYPE + "=?",
-                    new String[]{Email.CONTENT_ITEM_TYPE, Phone.CONTENT_ITEM_TYPE, StructuredName.CONTENT_ITEM_TYPE, Organization.CONTENT_ITEM_TYPE},
+                    PROJECTION_ID_NAME_IMG.toArray(new String[PROJECTION_ID_NAME_IMG.size()]),
+                    ContactsContract.Data.MIMETYPE + "=?",
+                    new String[]{StructuredName.CONTENT_ITEM_TYPE},
                     null
             );
 
             try {
-                everyoneElse = loadContactsFrom(cursor);
+                phonebookContacts = loadContactsFrom_Id_Name_Img(cursor);
             } finally {
                 if (cursor != null) {
                     cursor.close();
@@ -105,20 +85,62 @@ public class ContactsProvider {
         }
 
         WritableArray contacts = Arguments.createArray();
-        for (Contact contact : justMe.values()) {
-            contacts.pushMap(contact.toMap());
-        }
-        for (Contact contact : everyoneElse.values()) {
-            contacts.pushMap(contact.toMap());
+        for (Contact_Id_Name_Img contact : phonebookContacts.values()) {
+            contacts.pushMap(contact.toMap_Id_Name_Img());
         }
 
         return contacts;
     }
 
     @NonNull
-    private Map<String, Contact> loadContactsFrom(Cursor cursor) {
+    private Map<String, Contact_Id_Name_Img> loadContactsFrom_Id_Name_Img(Cursor cursor) {
 
-        Map<String, Contact> map = new LinkedHashMap<>();
+        Map<String, Contact_Id_Name_Img> map = new LinkedHashMap<>();
+
+        while (cursor != null && cursor.moveToNext()) {
+
+            int columnIndex = cursor.getColumnIndex(ContactsContract.Data.CONTACT_ID);
+            String contactId;
+            if (columnIndex != -1) {
+                contactId = String.valueOf(cursor.getInt(columnIndex));
+            } else {
+                contactId = String.valueOf(ID_FOR_PROFILE_CONTACT);
+            }
+
+            columnIndex = cursor.getColumnIndex(ContactsContract.RawContacts.SOURCE_ID);
+            if (columnIndex != -1) {
+                String uid = cursor.getString(columnIndex);
+                if (uid != null) {
+                    contactId = uid;
+                }
+            }
+
+            if (!map.containsKey(contactId)) {
+                map.put(contactId, new Contact_Id_Name_Img(contactId));
+            }
+
+            Contact_Id_Name_Img contact = map.get(contactId);
+
+            String mimeType = cursor.getString(cursor.getColumnIndex(ContactsContract.Data.MIMETYPE));
+
+            String name = cursor.getString(cursor.getColumnIndex(ContactsContract.Contacts.DISPLAY_NAME));
+            if (!TextUtils.isEmpty(name) && TextUtils.isEmpty(contact.displayName)) {
+                contact.displayName = name;
+            }
+
+            String rawPhotoURI = cursor.getString(cursor.getColumnIndex(Contactables.PHOTO_URI));
+            if (!TextUtils.isEmpty(rawPhotoURI)) {
+                contact.photoUri = getPhotoURIFromContactURI(rawPhotoURI, contactId);
+            }
+        }
+
+        return map;
+    }
+
+    @NonNull
+    private Map<String, Contact_Id_Name_Img_PhoneNumbers_Emails> loadContactsFrom_Id_Name_Img_PhoneNumbers_Emails(Cursor cursor) {
+
+        Map<String, Contact_Id_Name_Img_PhoneNumbers_Emails> map = new LinkedHashMap<>();
 
         while (cursor != null && cursor.moveToNext()) {
 
@@ -139,10 +161,10 @@ public class ContactsProvider {
             }
 
             if (!map.containsKey(contactId)) {
-                map.put(contactId, new Contact(contactId));
+                map.put(contactId, new Contact_Id_Name_Img_PhoneNumbers_Emails(contactId));
             }
 
-            Contact contact = map.get(contactId);
+            Contact_Id_Name_Img_PhoneNumbers_Emails contact = map.get(contactId);
 
             String mimeType = cursor.getString(cursor.getColumnIndex(ContactsContract.Data.MIMETYPE));
 
@@ -158,8 +180,6 @@ public class ContactsProvider {
 
             if (mimeType.equals(StructuredName.CONTENT_ITEM_TYPE)) {
                 contact.givenName = cursor.getString(cursor.getColumnIndex(StructuredName.GIVEN_NAME));
-                contact.middleName = cursor.getString(cursor.getColumnIndex(StructuredName.MIDDLE_NAME));
-                contact.familyName = cursor.getString(cursor.getColumnIndex(StructuredName.FAMILY_NAME));
             } else if (mimeType.equals(Phone.CONTENT_ITEM_TYPE)) {
                 String phoneNumber = cursor.getString(cursor.getColumnIndex(Phone.NUMBER));
                 int type = cursor.getInt(cursor.getColumnIndex(Phone.TYPE));
@@ -179,7 +199,7 @@ public class ContactsProvider {
                         default:
                             label = "other";
                     }
-                    contact.phones.add(new Contact.Item(label, phoneNumber));
+                    contact.phones.add(new Contact_Id_Name_Img_PhoneNumbers_Emails.Item(label, phoneNumber));
                 }
             } else if (mimeType.equals(Email.CONTENT_ITEM_TYPE)) {
                 String email = cursor.getString(cursor.getColumnIndex(Email.ADDRESS));
@@ -207,11 +227,8 @@ public class ContactsProvider {
                         default:
                             label = "other";
                     }
-                    contact.emails.add(new Contact.Item(label, email));
+                    contact.emails.add(new Contact_Id_Name_Img_PhoneNumbers_Emails.Item(label, email));
                 }
-            } else if (mimeType.equals(Organization.CONTENT_ITEM_TYPE)) {
-                contact.company = cursor.getString(cursor.getColumnIndex(Organization.COMPANY));
-                contact.jobTitle = cursor.getString(cursor.getColumnIndex(Organization.TITLE));
             }
         }
 
@@ -229,7 +246,7 @@ public class ContactsProvider {
 
             try {
                 BufferedInputStream in = new BufferedInputStream(photoStream);
-                File outputDir = context.getCacheDir(); // context being the Activity pointer
+                File outputDir = context.getCacheDir();
                 File outputFile = File.createTempFile("contact" + contactId, ".jpg", outputDir);
                 FileOutputStream output = new FileOutputStream(outputFile);
 
@@ -256,30 +273,59 @@ public class ContactsProvider {
         }
     }
 
-    private static class Contact {
+    private static class Contact_Id_Name_Img {
+        private String contactId;
+        private String displayName;
+        private String photoUri;
+
+        public Contact_Id_Name_Img(String contactId) {
+            this.contactId = contactId;
+        }
+
+        public WritableMap toMap_Id_Name_Img() {
+            WritableMap contact = Arguments.createMap();
+            contact.putString("recordID", contactId);
+            contact.putString("displayName", displayName);
+            contact.putString("thumbnailPath", photoUri == null ? "" : photoUri);
+            return contact;
+        }
+
+        public WritableMap toMap_Id_Name_Img_PhoneNumbers_Emails() {
+            WritableMap contact = Arguments.createMap();
+            contact.putString("recordID", contactId);
+            contact.putString("displayName", displayName);
+            contact.putString("thumbnailPath", photoUri == null ? "" : photoUri);
+
+            return contact;
+        }
+
+        public static class Item {
+            public String label;
+            public String value;
+
+            public Item(String label, String value) {
+                this.label = label;
+                this.value = value;
+            }
+        }
+    }
+
+    private static class Contact_Id_Name_Img_PhoneNumbers_Emails {
         private String contactId;
         private String displayName;
         private String givenName = "";
-        private String middleName = "";
-        private String familyName = "";
-        private String company = "";
-        private String jobTitle ="";
         private String photoUri;
         private List<Item> emails = new ArrayList<>();
         private List<Item> phones = new ArrayList<>();
 
-        public Contact(String contactId) {
+        public Contact_Id_Name_Img_PhoneNumbers_Emails(String contactId) {
             this.contactId = contactId;
         }
 
-        public WritableMap toMap() {
+        public WritableMap toMap_Id_Name_Img_PhoneNumbers_Emails() {
             WritableMap contact = Arguments.createMap();
             contact.putString("recordID", contactId);
-            contact.putString("givenName", TextUtils.isEmpty(givenName) ? displayName : givenName);
-            contact.putString("middleName", middleName);
-            contact.putString("familyName", familyName);
-            contact.putString("company", company);
-            contact.putString("jobTitle", jobTitle);
+            contact.putString("displayName", displayName);
             contact.putString("thumbnailPath", photoUri == null ? "" : photoUri);
 
             WritableArray phoneNumbers = Arguments.createArray();
@@ -312,5 +358,35 @@ public class ContactsProvider {
                 this.value = value;
             }
         }
+    }
+
+    public WritableArray getFromRecordId(String recordID) {
+        Map<String, Contact_Id_Name_Img_PhoneNumbers_Emails> phonebookContacts;
+        {
+
+            Cursor cursor = contentResolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                    PROJECTION_ID_NAME_IMG_PHONENUMBERS_EMAILS.toArray(new String[PROJECTION_ID_NAME_IMG_PHONENUMBERS_EMAILS.size()]),
+
+                    ContactsContract.CommonDataKinds.Phone.CONTACT_ID + " = ? AND " +
+                            ContactsContract.CommonDataKinds.Phone.TYPE + " = " +
+                            ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE,
+
+                    new String[]{recordID},
+                    null);
+
+            try {
+                phonebookContacts = loadContactsFrom_Id_Name_Img_PhoneNumbers_Emails(cursor);
+            } finally {
+                if (cursor != null) {
+                    cursor.close();
+                }
+            }
+        }
+        WritableArray contacts = Arguments.createArray();
+        for (Contact_Id_Name_Img_PhoneNumbers_Emails contact : phonebookContacts.values()) {
+            contacts.pushMap(contact.toMap_Id_Name_Img_PhoneNumbers_Emails());
+        }
+
+        return contacts;
     }
 }
