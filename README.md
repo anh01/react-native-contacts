@@ -1,3 +1,6 @@
+# What's in this fork
+**NOTE:** This is not meant for genreal usage. In a project I am working on, we needed to load the entire list of contacts quickly so we can display them in a list. To do this, we only load the parts relevant for displaying them in a list (thumnail and diaply name in our case) and then load the additional data when a contact is selected).
+
 # React Native Contacts
 Rx support with [react-native-contacts-rx](https://github.com/JeanLebrument/react-native-contacts-rx)
 
