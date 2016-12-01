@@ -10,6 +10,7 @@ import android.provider.ContactsContract.CommonDataKinds;
 import android.provider.ContactsContract.CommonDataKinds.StructuredName;
 import android.provider.ContactsContract.CommonDataKinds.Organization;
 import android.provider.ContactsContract.RawContacts;
+import android.util.Log;
 
 import com.facebook.react.bridge.Callback;
 import com.facebook.react.bridge.ReactApplicationContext;
@@ -48,6 +49,25 @@ public class ContactsManager extends ReactContextBaseJavaModule {
     }
 
     /*
+     * Returns all contactable records on phone
+     * queries CommonDataKinds.Contactables to get phones and emails
+     */
+    @ReactMethod
+    public void getFromRecordId(final String id, final Callback callback) {
+        AsyncTask.execute(new Runnable() {
+            @Override
+            public void run() {
+                Context context = getReactApplicationContext();
+                ContentResolver cr = context.getContentResolver();
+
+                ContactsProvider contactsProvider = new ContactsProvider(cr, context);
+                WritableArray contact = contactsProvider.getFromRecordId(id);
+                callback.invoke(contact);
+            }
+        });
+    }
+
+    /*
      * Adds contact to phone's addressbook
      */
     @ReactMethod
@@ -58,10 +78,6 @@ public class ContactsManager extends ReactContextBaseJavaModule {
         String familyName = contact.hasKey("familyName") ? contact.getString("familyName") : null;
         String company = contact.hasKey("company") ? contact.getString("company") : null;
         String jobTitle = contact.hasKey("jobTitle") ? contact.getString("jobTitle") : null;
-
-        // String name = givenName;
-        // name += middleName != "" ? " " + middleName : "";
-        // name += familyName != "" ? " " + familyName : "";
 
         ReadableArray phoneNumbers = contact.hasKey("phoneNumbers") ? contact.getArray("phoneNumbers") : null;
         int numOfPhones = 0;
@@ -103,7 +119,6 @@ public class ContactsManager extends ReactContextBaseJavaModule {
         op = ContentProviderOperation.newInsert(ContactsContract.Data.CONTENT_URI)
                 .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, 0)
                 .withValue(ContactsContract.Data.MIMETYPE, StructuredName.CONTENT_ITEM_TYPE)
-                // .withValue(StructuredName.DISPLAY_NAME, name)
                 .withValue(StructuredName.GIVEN_NAME, givenName)
                 .withValue(StructuredName.MIDDLE_NAME, middleName)
                 .withValue(StructuredName.FAMILY_NAME, familyName);
