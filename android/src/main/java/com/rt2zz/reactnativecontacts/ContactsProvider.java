@@ -364,7 +364,7 @@ public class ContactsProvider {
         Map<String, Contact_Id_Name_Img_PhoneNumbers_Emails> phonebookContacts;
         {
 
-            Cursor cursor = contentResolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+            Cursor cursor = contentResolver.query(ContactsContract.Data.CONTENT_URI,
                     PROJECTION_ID_NAME_IMG_PHONENUMBERS_EMAILS.toArray(new String[PROJECTION_ID_NAME_IMG_PHONENUMBERS_EMAILS.size()]),
                     ContactsContract.CommonDataKinds.Phone.CONTACT_ID + " = ?",
                     new String[]{recordID},
