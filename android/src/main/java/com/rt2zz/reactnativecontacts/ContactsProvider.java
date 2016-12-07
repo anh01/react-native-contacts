@@ -366,11 +366,7 @@ public class ContactsProvider {
 
             Cursor cursor = contentResolver.query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
                     PROJECTION_ID_NAME_IMG_PHONENUMBERS_EMAILS.toArray(new String[PROJECTION_ID_NAME_IMG_PHONENUMBERS_EMAILS.size()]),
-
-                    ContactsContract.CommonDataKinds.Phone.CONTACT_ID + " = ? AND " +
-                            ContactsContract.CommonDataKinds.Phone.TYPE + " = " +
-                            ContactsContract.CommonDataKinds.Phone.TYPE_MOBILE,
-
+                    ContactsContract.CommonDataKinds.Phone.CONTACT_ID + " = ?",
                     new String[]{recordID},
                     null);
 
